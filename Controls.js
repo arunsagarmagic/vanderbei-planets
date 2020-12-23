@@ -2,9 +2,11 @@ var gl, canvas,  pi180 = 180/Math.PI,
   transl = -3, rTouch, fiTouch, idTouch0,
   xRot = yRot = zRot =  xOffs = yOffs =  drag = 0;
 
+var rotationdelta=Math.random();
+
 window.setInterval(()=>{
 	//xRot += 0.5;
-	yRot += 0.7;
+	yRot += 0.7 + rotationdelta;
 	//zRot += 1.3;
 	drawScene();
 }, 15);
