@@ -1,0 +1,184 @@
+<html><head>
+<TITLE>2D noise</TITLE>
+
+<script src="../CanvasMatrix.js" type="text/javascript"></script>
+<script src="../Controls.js" type="text/javascript"></script>
+
+<script id="shader-vs" type="x-shader/x-vertex"> 
+  attribute vec3 aPos;
+  attribute vec3 aNorm;
+  uniform mat4 mvMatrix;
+  uniform mat4 prMatrix;
+  uniform vec4 colDif;
+  varying vec4 color;
+  const vec4 dirDif = vec4(0., 0., 1., 0.);
+  const vec4 dirHalf = vec4(-.4034, .259, .8776, 0.);
+void main(void) {
+   gl_Position = prMatrix * mvMatrix * vec4(aPos, 1.);
+   vec4 rotNorm = mvMatrix * vec4( aNorm, .0);
+   float i = max( 0., abs(dot(rotNorm, dirDif)) );
+   color = vec4(i*colDif.rgb, colDif.a);
+//   i = pow( max( 0., abs(dot(rotNorm, dirHalf)) ), 80.);
+//   color += vec4(i, i, i, 0.);
+}
+</script> 
+ 
+<script id="shader-fs" type="x-shader/x-fragment"> 
+precision mediump float;
+  varying vec4 color;
+void main(void) {
+   gl_FragColor = color;
+}
+</script> 
+ 
+<script type="text/javascript"> 
+
+var prog,  mvMat, mvMatLoc, rotMat, normLoc,
+    n = 128, n1 = n-1, u, u0,  Rc = 8, Gauss;
+function webGLStart() {
+   transl = -3;  trans_x = 0;
+   initGL();
+   var c_w = window.innerWidth - 50,  c_h = window.innerHeight - 10;
+   canvas.width = c_w;   canvas.height = c_h;
+   gl.viewport(0, 0, c_w, c_h);
+
+   prog  = gl.createProgram();
+   gl.attachShader(prog, getShader( gl, "shader-vs" ));
+   gl.attachShader(prog, getShader( gl, "shader-fs" ));
+   gl.linkProgram(prog);
+   gl.useProgram(prog);
+
+   prMatrix = new CanvasMatrix4();
+   prMatrix.perspective(45, c_w / c_h, .1, 100);
+   gl.uniformMatrix4fv( gl.getUniformLocation(prog,"prMatrix"),
+      false, new Float32Array(prMatrix.getAsArray()) );
+   mvMatrix = new CanvasMatrix4();
+   rotMat = new CanvasMatrix4();
+   rotMat.makeIdentity();
+   rotMat.rotate(-45, 1,0,0);
+   mvMatLoc = gl.getUniformLocation(prog,"mvMatrix");
+
+   gl.enable(gl.DEPTH_TEST);
+   gl.depthFunc(gl.LEQUAL);
+   gl.clearDepth(1.0);
+   gl.clearColor(1, 1, 1, 1);
+
+   var ind = [0,1,2,3];
+   for (var i = 0; i < n-3; i++ )
+      for (var j = 0; j < n-2; j++ ){
+         ind.push ( i*(n-2) + j + 4 );
+         ind.push ( (i+1)*(n-2) + j + 4 );
+      }
+   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
+   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(ind),
+     gl.STATIC_DRAW);
+
+   u = new Array(n);
+   for (var i = 0; i < n; i++)  u[i] = new Array(n);
+   u0 = new Array(n+64);
+   for (var i = 0; i < n+32; i++)  u0[i] = new Array(n+32);
+   Gauss = new Array(16);
+
+   set();
+
+  canvas.resize = function (){
+    c_w = window.innerWidth - 50;  c_h = window.innerHeight - 10;
+    canvas.width = c_w;   canvas.height = c_h;
+    gl.viewport(0, 0, c_w, c_h);
+    prMatrix.makeIdentity();
+    prMatrix.perspective(45, c_w/c_h, .1, 100);
+    gl.uniformMatrix4fv( gl.getUniformLocation(prog,"prMatrix"),
+      false, new Float32Array(prMatrix.getAsArray()) );
+    draw();
+  }
+}
+
+function set(){
+  for (var i = 0; i < 16; i++)  Gauss[i] = Math.exp(-i*i/(Rc*Rc));
+  for (var i = 0; i < n + 32; i++)
+    for (var j = 0; j < n + 32; j++)
+       u0[i][j] = .04 * (Math.random() - .5);
+  var ma = 15;
+  for (var i = 0; i < n; i++)
+   for (var j = 0; j < n; j++){
+    var s = 0;
+    for (var k = -ma; k <= ma; k++)
+     for (var m = -ma; m <= ma; m++)
+       s += Gauss[Math.abs(k)]*Gauss[Math.abs(m)]*u0[i + 16 + k][j + 16 + m];
+    u[i][j] = s;
+   }
+  var posLoc = gl.getAttribLocation(prog, "aPos");
+  gl.enableVertexAttribArray( posLoc );
+  normLoc = gl.getAttribLocation(prog, "aNorm");
+  gl.enableVertexAttribArray( normLoc );
+
+  var data = [-1,-1,0,0,0,1, 1,-1,0,0,0,1, -1,1,0,0,0,1, 1,1,0,0,0,1],
+    nz = -4/n1, nz2 = nz*nz;
+  for ( var i = 1; i < n1; i++ )
+    for ( var j = 1; j < n1; j++ ){
+      data.push(j/(n/2) - 1); data.push(i/(n/2) - 1); data.push(u[i][j]);
+      var nx = u[i][j+1] - u[i][j-1];
+      var ny = u[i+1][j] - u[i-1][j];
+      var no = Math.sqrt(nx*nx + ny*ny + nz2);
+      data.push(nx/no); data.push(ny/no); data.push(nz/no);
+    }
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+  gl.vertexAttribPointer(posLoc, 3, gl.FLOAT, false, 24, 0);
+  gl.vertexAttribPointer(normLoc, 3, gl.FLOAT, false, 24, 12);
+  drawScene();
+}
+function drawScene(){
+  rotMat.rotate(xRot/3, 1,0,0);  rotMat.rotate(yRot/3, 0,1,0);
+  rotMat.rotate(zRot, 0,0,1);
+  yRot = xRot = zRot = 0;
+  mvMatrix.load( rotMat );
+  mvMatrix.translate(trans_x, 0, transl);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.uniformMatrix4fv( mvMatLoc, false,
+     new Float32Array(mvMatrix.getAsArray()) );
+  gl.uniform4f(gl.getUniformLocation(prog, "colDif"), 0, .7, 0, 1);
+  for(var i=0; i < n-3; i++)
+    gl.drawElements(gl.TRIANGLE_STRIP, 2*(n-2), gl.UNSIGNED_SHORT, 8+4*(n-2)*i);
+
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+  gl.uniform4f(gl.getUniformLocation(prog, "colDif"), 0, 0, 1, .8);
+  gl.drawElements(gl.TRIANGLE_STRIP, 4, gl.UNSIGNED_SHORT, 0);
+  gl.disable(gl.BLEND);
+  gl.flush ();
+}
+function reset() {
+  set();
+}
+function setRc(v) {
+  Rc = v.valueOf();
+  set();
+}
+</script> 
+<style type="text/css">
+  H1{ font-size: 120%; color: green}
+</style>
+</head>
+<body onload="webGLStart();" onresize="canvas.resize();">
+<canvas id="canvas" width="800" height="800"></canvas>
+<br><button onclick="reset()">Reset</button>
+Rc<input size="3" value="8" onchange="setRc( this.value )">
+
+<br>Use your fingers or mouse to control the model
+(hold <i>shift</i> key or use mouse wheel to zoom it).
+Canvas is matched to your browser window.
+Press <i>Reset</i> to get new terrain realization. Set correlation
+length <i>Rc &ge; 16</i> to get fractal like terrains.
+
+<p>Random 2D terrain. It is remake of a Java applet see
+<a href="../../Perc/noise.htm">White, correlated and fractal noise</a>.
+<i>128&times;128</i> grid is used because CPU is not very fast
+(for larger grids one can make easy GPU realization but 8-bit textures are
+not enough for accurate heights and normals again :)
+
+<hr><a href="../webgl.htm">WebGL Demos</a>
+&nbsp; &nbsp; <i>updated</i> 14 August 2010
+
+</body></html>
