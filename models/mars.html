@@ -44,7 +44,7 @@ function webGLStart() {
    canvas.width =  size;   canvas.height = size;
    gl.viewport(0, 0, size, size);
 
-   var texture = loadTexture("8k_mars.jpg");
+   var texture = loadTexture("4k_mars.jpg");
 
    var prog  = gl.createProgram();
    gl.attachShader(prog, getShader( gl, "shader-vs" ));
